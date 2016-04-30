@@ -6,5 +6,7 @@ if ($e == $r) {
 	} elsif ($l == $d) {
 
 	} else {}
+	my int $s = \$a;
+	$z = $$s;
 }
 

@@ -19,7 +19,6 @@ import ErrM
   '!' { PT _ (TS _ 1) }
   '!=' { PT _ (TS _ 2) }
   '$' { PT _ (TS _ 3) }
-  '$$' { PT _ (TS _ 4) }
   '%' { PT _ (TS _ 5) }
   '&&' { PT _ (TS _ 6) }
   '&=' { PT _ (TS _ 7) }
@@ -144,7 +143,6 @@ FunCall : Ident '(' ListRExpr ')' { AbsPerl.Call $1 $3 }
 
 ListRExpr :: { [RExpr] }
 ListRExpr : {- empty -} { [] }
-          | RExpr { (:[]) $1 }
           | RExpr ',' ListRExpr { (:) $1 $3 }
 
 LExpr :: { LExpr }
