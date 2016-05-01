@@ -6,6 +6,4 @@ all:
 clean:
 	-rm -f *.log *.aux *.hi *.o *.dvi
 
-distclean: clean
-	-rm -f DocPerl.* LexPerl.* ParPerl.* LayoutPerl.* SkelPerl.* PrintPerl.* TestPerl.* AbsPerl.* TestPerl ErrM.* SharedString.* ComposOp.* Perl.dtd XMLPerl.* Makefile*
 	

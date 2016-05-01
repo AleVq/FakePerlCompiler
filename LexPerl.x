@@ -12,7 +12,6 @@ import Data.Word (Word8)
 import Data.Char (ord)
 }
 
-
 $l = [a-zA-Z\192 - \255] # [\215 \247]    -- isolatin1 letter FIXME
 $c = [A-Z\192-\221] # [\215]    -- capital isolatin1 letter FIXME
 $s = [a-z\222-\255] # [\247]    -- small isolatin1 letter FIXME
@@ -69,11 +68,11 @@ tokenPosn :: Token -> Posn
 tokenPosn (PT p _) = p
 tokenPosn (Err p) = p
 
-tokenLineCol :: Token -> (Int, Int)
-tokenLineCol = posLineCol . tokenPosn
-
 posLineCol :: Posn -> (Int, Int)
 posLineCol (Pn _ l c) = (l,c)
+
+posLine :: Token -> Int
+posLine (PT (Pn _ l _) _) = l
 
 mkPosToken :: Token -> ((Int, Int), String)
 mkPosToken t@(PT p _) = (posLineCol p, prToken t)
@@ -87,7 +86,6 @@ prToken t = case t of
   PT _ (TD s)   -> s
   PT _ (TC s)   -> s
   Err _         -> "#error"
-
 
 data BTree = N | B String Tok BTree BTree deriving (Show)
 

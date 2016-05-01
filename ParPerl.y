@@ -108,28 +108,28 @@ Double  :: { Double }  : L_doubl  { (read ( $1)) :: Double }
 Ident   :: { Ident }   : L_ident  { Ident $1 }
 
 Boolean :: { Boolean }
-Boolean : 'True' { AbsPerl.Boolean_True }
-        | 'False' { AbsPerl.Boolean_False }
+Boolean : 'True' { AbsPerl.Boolean_True (posLine  $1) }
+        | 'False' { AbsPerl.Boolean_False (posLine  $1) }
 
 RExpr :: { RExpr }
-      :  '(' RExpr ')'   { $2 }
-      | RExpr '||' RExpr { InfixOp (BoolOp Or)   $1 $3 }
-      | RExpr '&&' RExpr { InfixOp (BoolOp And)  $1 $3 }
-      | RExpr '==' RExpr { InfixOp (RelOp Eq)    $1 $3 }
-      | RExpr '!=' RExpr { InfixOp (RelOp Neq)   $1 $3 }
-      | RExpr '<'  RExpr { InfixOp (RelOp Lt)    $1 $3 }
-      | RExpr '<=' RExpr { InfixOp (RelOp LtE)   $1 $3 }
-      | RExpr '>'  RExpr { InfixOp (RelOp Gt)    $1 $3 }
-      | RExpr '>=' RExpr { InfixOp (RelOp GtE)   $1 $3 }
-      | RExpr '+'  RExpr { InfixOp (ArithOp Add) $1 $3 }
-      | RExpr '-'  RExpr { InfixOp (ArithOp Sub) $1 $3 }
-      | RExpr '*'  RExpr { InfixOp (ArithOp Mul) $1 $3 }
-      | RExpr '/'  RExpr { InfixOp (ArithOp Div) $1 $3 }
-      | RExpr '%'  RExpr { InfixOp (ArithOp Mod) $1 $3 }
-      | RExpr '**'  RExpr { InfixOp (ArithOp Pow) $1 $3 }
-      | '!' RExpr        { UnaryOp Not $2 }
-      | '-' RExpr %prec NEG { UnaryOp Neg $2 }
-      | '\\' LExpr     {  Ref $2 }
+      :  '(' RExpr ')'   { Rexpr $2 (posLine  $3) }
+      | RExpr '||' RExpr { InfixOp (BoolOp Or)   $1  $3 (posLine  $2)}
+      | RExpr '&&' RExpr { InfixOp (BoolOp And)  $1  $3 (posLine  $2)}
+      | RExpr '==' RExpr { InfixOp (RelOp Eq)    $1  $3 (posLine  $2)}
+      | RExpr '!=' RExpr { InfixOp (RelOp Neq)   $1  $3 (posLine  $2)}
+      | RExpr '<'  RExpr { InfixOp (RelOp Lt)    $1  $3 (posLine  $2)}
+      | RExpr '<=' RExpr { InfixOp (RelOp LtE)   $1  $3 (posLine  $2)}
+      | RExpr '>'  RExpr { InfixOp (RelOp Gt)    $1  $3 (posLine  $2)}
+      | RExpr '>=' RExpr { InfixOp (RelOp GtE)   $1  $3 (posLine  $2)}
+      | RExpr '+'  RExpr { InfixOp (ArithOp Add) $1  $3 (posLine  $2)}
+      | RExpr '-'  RExpr { InfixOp (ArithOp Sub) $1  $3 (posLine  $2)}
+      | RExpr '*'  RExpr { InfixOp (ArithOp Mul) $1  $3 (posLine  $2)}
+      | RExpr '/'  RExpr { InfixOp (ArithOp Div) $1  $3 (posLine  $2)}
+      | RExpr '%'  RExpr { InfixOp (ArithOp Mod) $1  $3 (posLine  $2)}
+      | RExpr '**' RExpr { InfixOp (ArithOp Pow) $1  $3 (posLine  $2)}
+      | '!' RExpr        { UnaryOp Not $2 (posLine  $1) }
+      | '-' RExpr %prec NEG { UnaryOp Neg $2 (posLine  $1)}
+      | '\\' LExpr     {  Ref $2 (posLine  $1)}
       | LExpr            { Lexpr $1 }
       | FunCall { FCall $1 }
       | Integer { AbsPerl.Int $1 }
@@ -139,30 +139,32 @@ RExpr :: { RExpr }
       | Boolean { AbsPerl.Bool $1 }
 
 FunCall :: { FunCall }
-FunCall : Ident '(' ListRExpr ')' { AbsPerl.Call $1 $3 }
+FunCall : Ident '(' ListRExpr ')' {AbsPerl.Call $1 $3 (posLine  $4)}
 
 ListRExpr :: { [RExpr] }
 ListRExpr : {- empty -} { [] }
+          | RExpr { (:[]) $1 }
           | RExpr ',' ListRExpr { (:) $1 $3 }
 
 LExpr :: { LExpr }
 LExpr : LExpr1 { $1 }
-      | '$' LExpr { AbsPerl.Deref $2 }
-      | '++' LExpr1 { PrePostIncDecr Pre Inc $2 }
-      | '--' LExpr1 { PrePostIncDecr Pre Decr $2 }
+      | '$' LExpr { AbsPerl.Deref $2 (posLine  $1) }
+      | '++' LExpr1 { PrePostIncDecr Pre Inc $2 (posLine  $1) }
+      | '--' LExpr1 { PrePostIncDecr Pre Decr $2 (posLine  $1)}
 
 LExpr1 :: { LExpr }
 LExpr1 : LExpr2 { $1 }
-       | LExpr2 '++' { PrePostIncDecr Post Inc $1 }
-       | LExpr2 '--' { PrePostIncDecr Post Decr $1 }
+       | LExpr2 '++' { PrePostIncDecr Post Inc  $1 (posLine  $2)}
+       | LExpr2 '--' { PrePostIncDecr Post Decr $1 (posLine  $2)}
 
 LExpr2 :: { LExpr }
-LExpr2 : '(' LExpr ')' { $2 } | BLExpr { AbsPerl.BasLExpr $1 }
+LExpr2 : '(' LExpr ')' { Lex $2 (posLine  $3) }
+       | BLExpr { AbsPerl.BasLExpr $1 }
 
 BLExpr :: { BLExpr }
-BLExpr : BLExpr '[' RExpr ']' { AbsPerl.ArrayEl $1 $3 }
-       | '$' Ident { AbsPerl.Id $2 }
-       | '@' Ident { AbsPerl.Id $2 }
+BLExpr : BLExpr '[' RExpr ']' { AbsPerl.ArrayEl $1 $3 (posLine  $4) }
+       | '$' Ident { AbsPerl.Id $2 (posLine  $1)}
+       | '@' Ident { AbsPerl.Id $2 (posLine  $1)}
 
 Program :: { Program }
 Program : ListDecl { AbsPerl.Prog (reverse $1) }
@@ -172,9 +174,9 @@ ListDecl : {- empty -} { [] }
           | ListDecl Decl { flip (:) $1 $2 }
 
 Decl :: { Decl }
-Decl : 'my' Type ListVarDeclInit ';' { AbsPerl.Dvar $2 $3 }
-     | 'my' Type ListUndVarDecl ';' { AbsPerl.UndVar $2 $3}
-     | 'sub' Type Ident '(' ListParameter ')' '{' ListStmtDecl '}' { AbsPerl.Dfun $2 $3 $5 (reverse $8) }
+Decl : 'my' Type ListVarDeclInit ';' { AbsPerl.Dvar $2 (posLine  $1) $3 }
+     | 'my' Type ListUndVarDecl ';' { AbsPerl.UndVar $2 (posLine  $1) $3}
+     | 'sub' Type Ident '(' ListParameter ')' '{' ListStmtDecl '}' { AbsPerl.Dfun $2 $3 (posLine  $1) $5 (reverse $8) }
 
 ListVarDeclInit :: { [VarDeclInit] }
 ListVarDeclInit : VarDeclInit { (:[]) $1 }
@@ -189,14 +191,14 @@ UndVarDecl : UndArr { AbsPerl.UndVarD $1 }
            | UndVar { AbsPerl.UndVarA $1 }
 
 UndArr :: { UndArr }
-UndArr : '@' Ident { AbsPerl.UndA $2 }
+UndArr : '@' Ident { AbsPerl.UndA $2 (posLine  $1)}
 
 UndVar :: { UndVar }
-UndVar : '$' Ident { AbsPerl.UndV $2 }
+UndVar : '$' Ident { AbsPerl.UndV $2 (posLine  $1)}
 
 Type :: { Type }
 Type : Type '[' Integer ']' { AbsPerl.ArrDef $1 $3 }
-      | '\\' LExpr { AbsPerl.Pointer $2 }
+      | '\\' Type { AbsPerl.Pointer $2 }
       | 'bool' { T_Bool }
       | 'char' { T_Char }
       | 'float' { T_Float }
@@ -210,18 +212,17 @@ VarDeclInit : VarDeclInitArray { AbsPerl.VarDeclInA $1 }
             | VarDeclInitVar { AbsPerl.VarDeclInV $1 }
 
 VarDeclInitArray :: { VarDeclInitArray }
-VarDeclInitArray : '@' Ident '=' '(' Array ')' { AbsPerl.VarDeclInitAr $2 $5 }
+VarDeclInitArray : '@' Ident '=' '(' Array ')' { AbsPerl.VarDeclInitAr $2 $5 (posLine  $1)}
 
 VarDeclInitVar :: { VarDeclInitVar }
-VarDeclInitVar : '$' Ident '=' RExpr { AbsPerl.VarDeclInitV $2 $4 }
+VarDeclInitVar : '$' Ident '=' RExpr { AbsPerl.VarDeclInitV $2 $4 (posLine  $1)}
 
 ListArray :: { [Array] }
-ListArray : {- empty -} { [] }
-          | Array { (:[]) $1 }
+ListArray : Array { (:[]) $1 }
           | Array ',' ListArray { (:) $1 $3 }
 
 Array :: { Array }
-Array : '(' ListArray ')' { AbsPerl.Arr $2 }
+Array : '(' ListArray ')' { AbsPerl.Arr $2 (posLine  $3)}
       | ListRExpr { AbsPerl.ArrE  $1 }
 
 ListParameter :: { [Parameter] }
@@ -234,12 +235,12 @@ Parameter : Modality Type Ident { AbsPerl.Param $1 $2 $3 }
 
 Modality :: { Modality }
 Modality : {- empty -} { M_Void }
-         | 'val' { M_Val }
-         | 'ref' {  M_Ref }
-         | 'const' {  M_Const }
-         | 'res' {  M_Res }
-         | 'valres' {  M_Valres }
-         | 'name' {  M_Name }
+         | 'val' { M_Val (posLine  $1)}
+         | 'ref' {  M_Ref (posLine  $1)}
+         | 'const' {  M_Const (posLine  $1)}
+         | 'res' {  M_Res (posLine  $1)}
+         | 'valres' {  M_Valres (posLine  $1)}
+         | 'name' {  M_Name (posLine  $1)}
 
 ListStmtDecl :: { [StmtDecl] }
 ListStmtDecl : {- empty -} { [] }
@@ -249,61 +250,66 @@ StmtDecl :: { StmtDecl }
 StmtDecl : Decl { AbsPerl.Decls $1 } | Stmt { AbsPerl.Stmts $1 }
 
 Stmt :: { Stmt }
-Stmt : FunCall ';' { AbsPerl.ProcCall $1 }
-     | '{' ListStmtDecl '}' { AbsPerl.BlockDecl (reverse $2) }
+Stmt : FunCall ';' { AbsPerl.ProcCall $1 (posLine  $2)}
+     | '{' ListStmtDecl '}' { AbsPerl.BlockDecl (posLine  $1) (reverse $2)}
      | JumpStmt ';' { AbsPerl.Jmp $1 }
      | IterStmt { AbsPerl.Iter $1 }
      | SelectionStmt { AbsPerl.Sel $1 }
      | TryCatch { AbsPerl.TryC $1 }
-     | LExpr Assignment_op RExpr ';' { AbsPerl.Assgn $1 $2 $3 }
-     | LExpr ';' { AbsPerl.LExprStmt $1 }
+     | LExpr Assignment_op RExpr ';' { AbsPerl.Assgn $1 $2 $3 (posLine  $4) }
+     | LExpr ';' { AbsPerl.LExprStmt $1 (posLine  $2)}
 
 Assignment_op :: { Assignment_op }
-Assignment_op : '=' { AbsPerl.Assign }
-              | '*=' { AbsPerl.AssgnMul }
-              | '+=' { AbsPerl.AssgnAdd }
-              | '/=' { AbsPerl.AssgnDiv }
-              | '-=' { AbsPerl.AssgnSub }
-              | '**=' { AbsPerl.AssgnPow }
-              | '&=' { AbsPerl.AssgnAnd }
-              | '|=' { AbsPerl.AssgnOr }
+Assignment_op : '=' { AbsPerl.Assign (posLine  $1)}
+              | '*=' { AbsPerl.AssgnMul (posLine  $1)}
+              | '+=' { AbsPerl.AssgnAdd (posLine  $1)}
+              | '/=' { AbsPerl.AssgnDiv (posLine  $1)}
+              | '-=' { AbsPerl.AssgnSub (posLine  $1)}
+              | '**=' { AbsPerl.AssgnPow (posLine  $1)}
+              | '&=' { AbsPerl.AssgnAnd (posLine  $1)}
+              | '|=' { AbsPerl.AssgnOr (posLine  $1)}
 
 TryCatch :: { TryCatch }
-TryCatch : 'try' '{' ListStmtDecl '}' 'catch' '(' Type String ')' '{' ListStmtDecl '}' { AbsPerl.Try (reverse $3) $7 $8 (reverse $11) }
+TryCatch : 'try' '{' ListStmtDecl '}' 'catch' '(' Type String ')' '{' ListStmtDecl '}' { AbsPerl.Try (posLine  $1)  (reverse $3) $7 $8 (posLine  $5) (reverse $11) }
 
 JumpStmt :: { JumpStmt }
-JumpStmt : 'break' { AbsPerl.Break }
-         | 'continue' { AbsPerl.Continue }
-         | 'return' { AbsPerl.RetExpVoid }
-         | 'return' '(' RExpr ')' { AbsPerl.RetExp $3 }
+JumpStmt : 'return' { AbsPerl.RetExpVoid (posLine  $1)}
+         | 'return' '(' RExpr ')' { AbsPerl.RetExp $3 (posLine  $1)}
 
 SelectionStmt :: { SelectionStmt }
-SelectionStmt : 'if' '(' RExpr ')' '{' ListStmtDecl '}' { AbsPerl.IfNoElse $3 (reverse $6) }
-              | 'if' '(' RExpr ')' '{' ListStmtDecl '}' Elsif { AbsPerl.ElseIf $3 (reverse $6) $8 }
+SelectionStmt : 'if' '(' RExpr ')' '{' ListStmtDecl '}' { AbsPerl.IfNoElse $3 (posLine  $1)(reverse $6) }
+              | 'if' '(' RExpr ')' '{' ListStmtDecl '}' Elsif { AbsPerl.IfElsIf $3 (posLine  $1) (reverse $6) $8 }
 
 Elsif :: { Elsif }
-Elsif : 'elsif' '(' RExpr ')' '{' ListStmtDecl '}' Elsif  { AbsPerl.IfElsIf $3 (reverse $6) $8 }
-      | 'else' '{' ListStmtDecl '}' { AbsPerl.EndElsIf (reverse $3) }
+Elsif : 'elsif' '(' RExpr ')' '{' ListStmtDecl '}' Elsif  { AbsPerl.ElsIf $3 (posLine  $1)(reverse $6) $8 }
+      | 'else' '{' ListStmtDecl '}' { AbsPerl.EndElsIf (posLine  $1) (reverse $3) }
 
 IterStmt :: { IterStmt }
-IterStmt : 'while' '(' RExpr ')' '{' ListStmtDecl '}' { AbsPerl.While $3 (reverse $6) }
-         | 'do' '{' ListStmtDecl '}' 'while' '(' RExpr ')' ';' { AbsPerl.DoWhile (reverse $3) $7 }
-         | 'do' '{' ListStmtDecl '}' 'until' '(' RExpr ')' ';' { AbsPerl.DoUntil (reverse $3) $7 }
-         | 'for' '(' ForStmtDecl ';' RExpr ';' ForStmt ')' '{' ListStmtDecl '}' { AbsPerl.For $3 $5 $7 (reverse $10) }
-         | 'foreach' ForStmt '(' ForStmt ')' '{' ListStmtDecl '}' { AbsPerl.ForEach $2 $4 (reverse $7) }
+IterStmt : 'while' '(' RExpr ')' '{' ListIterStmtDecl '}' { AbsPerl.While $3 (posLine  $1) (reverse $6) }
+         | 'do' '{' ListIterStmtDecl '}' 'while' '(' RExpr ')' ';' { AbsPerl.DoWhile (reverse $3) $7 (posLine  $1)}
+         | 'do' '{' ListIterStmtDecl '}' 'until' '(' RExpr ')' ';' { AbsPerl.DoUntil (reverse $3) $7 (posLine  $1)}
+         | 'for' '(' ForStmtDecl ';' RExpr ';' ForStmt ')' '{' ListIterStmtDecl '}' { AbsPerl.For $3 $5 $7 (posLine  $1) (reverse $10) }
+         | 'foreach' ForStmt '(' ForStmt ')' '{' ListIterStmtDecl '}' { AbsPerl.ForEach $2 $4 (posLine  $1) (reverse $7) }
+
+IterStmtDecl :: {IterStmtDecl}
+IterStmtDecl : 'break' { AbsPerl.Break (posLine  $1)}
+             | 'continue' { AbsPerl.Continue (posLine  $1)}
+             | StmtDecl {AbsPerl.ItStDe $1}
+
+ListIterStmtDecl :: { [IterStmtDecl] }
+ListIterStmtDecl : {- empty -} { [] }
+                 | ListIterStmtDecl IterStmtDecl { flip (:) $1 $2 }
 
 ForStmtDecl :: {ForStmtDecl}
-ForStmtDecl : 'my' Type '$' Ident Assignment_op RExpr { AbsPerl.ForDeclInit $2 $4 $5 $6}
-            | '$' Ident Assignment_op RExpr {AbsPerl.Simple $2 $3 $4}
+ForStmtDecl : 'my' Type '$' Ident Assignment_op RExpr { AbsPerl.ForDeclInit $2 $4 $5 $6 (posLine  $1)}
+            | '$' Ident Assignment_op RExpr {AbsPerl.Simple $2 $3 $4 (posLine  $1)}
 
 ForStmt :: {ForStmt}
-ForStmt : LExpr {AbsPerl.LexprForStmt $1}
-        | 'my' Type '$' Ident {AbsPerl.ForDecl $2 $4}
-        | Ident Assignment_op RExpr {AbsPerl.AssFor $1 $2 $3}
+ForStmt : LExpr {AbsPerl.LexprForStmt $1 }
+        | 'my' Type '$' Ident {AbsPerl.ForDecl $2 $4 (posLine  $1)}
+        | Ident Assignment_op RExpr {AbsPerl.AssFor $1 $2 $3 }
 
 {
-
-
 returnM :: a -> Err a
 returnM = return
 
