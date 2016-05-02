@@ -1,5 +1,5 @@
 
 sub int f () {
-break;
+my char $c = 3;
 }
 
