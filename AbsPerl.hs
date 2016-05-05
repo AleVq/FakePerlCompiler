@@ -52,7 +52,7 @@ data VarDeclInitVar = VarDeclInitV Ident RExpr Int
 data Array = Arr [Array] Int| ArrE [RExpr]
   deriving (Eq, Ord, Show )
 
-data Parameter = Param Modality Type Ident
+data Parameter = Param Modality Type DolOrAt Ident 
   deriving (Eq, Ord, Show )
 
 data Modality
@@ -93,7 +93,7 @@ data Assignment_op
 data TryCatch = Try Int[StmtDecl]  Type String Int[StmtDecl] -- typechecker verifica sia T_Err
   deriving (Eq, Ord, Show)
 
-data JumpStmt = RetExpVoid Int| RetExp RExpr Int
+data JumpStmt = RetExpVoid Int | RetExp RExpr Int
   deriving (Eq, Ord, Show )
 
 data SelectionStmt
@@ -128,19 +128,22 @@ data ForStmt
     | AssFor Ident Assignment_op RExpr 
   deriving (Eq, Ord, Show)
 
-
 data RExpr
     = Rexpr RExpr Int
     | InfixOp InfixOp RExpr RExpr Int
     | UnaryOp UnaryOp RExpr Int
     | Ref LExpr Int
-    | FCall FunCall 
-    | Int Integer
+    | FCall FunCall
+    | Lexpr LExpr
+    | Const Const
+  deriving (Eq, Ord, Show)
+
+data Const
+    = Int Integer
     | Char Char
     | String String
     | Float Double
     | Bool Boolean
-    | Lexpr LExpr
   deriving (Eq, Ord, Show)
 
 data InfixOp = ArithOp ArithOp | RelOp RelOp | BoolOp BoolOp 
@@ -174,5 +177,8 @@ data PrePost = Post | Pre
 data IncDecr = Inc | Decr 
   deriving (Eq,Ord,Show)
 
-data BLExpr = ArrayEl BLExpr RExpr Int| Id Ident Int
+data BLExpr = ArrayEl BLExpr RExpr Int | Id DolOrAt Ident  
   deriving (Eq, Ord, Show )
+
+data DolOrAt = Dollar | At
+  deriving (Eq, Ord, Show)

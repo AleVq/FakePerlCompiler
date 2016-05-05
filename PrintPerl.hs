@@ -21,26 +21,29 @@ doc = (:)
 render :: Doc -> String
 render d = rend 0 (map ($ "") $ d []) "" where
   rend i ss = case ss of
-    "["      :ts -> showChar '[' . rend i ts
-    "("      :ts -> showChar '(' . rend i ts
-    "{"      :ts -> showChar '{' . new (i+1) . rend (i+1) ts
-    "}" : ";":ts -> new (i-1) . space "}" . showChar ';' . new (i-1) . rend (i-1) ts
-    "}"      :ts -> new (i-1) . showChar '}' . new (i-1) . rend (i-1) ts
-    ";"      :ts -> showChar ';' . new i . rend i ts
-    t  : "," :ts -> showString t . space "," . rend i ts
-    t  : ")" :ts -> showString t . showChar ')' . rend i ts
-    t  : "]" :ts -> showString t . showChar ']' . rend i ts
-    t        :ts -> space t . rend i ts
-    _            -> id
+    "["       :ts -> showChar '[' . rend i ts
+    "("       :ts -> showChar '(' . rend i ts
+    "{" : "}" :ts -> showChar '{' . new  (i) . showChar '}' . new  (i - 1) . rend (i - 1) ts
+    "{"       :ts -> showChar '{' . new  (i + 1) . rend (i+1) ts
+    ";" : "}" :ts -> showChar ';' . new  (i - 1) . showChar '}' . new  (i - 2) . rend (i - 2) ts
+    ";"       :ts -> showChar ';' . new  i       . rend i     ts
+    "}" : ";" :ts -> new (i - 1)  . space    "}" . showChar ';' . new  (i - 1) . rend (i - 1) ts
+    "}"       :ts -> new (i - 1)  . showChar '}' . new (i - 1)  . rend (i - 1) ts
+    t  : ","  :ts -> showString t . space    "," . rend i ts
+    t  : ")"  :ts -> showString t . showChar ')' . rend i ts
+    t  : "]"  :ts -> showString t . showChar ']' . rend i ts
+    t         :ts -> space t . rend i ts
+    _             -> id
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
   space t = showString t . (\s -> if null s then "" else ' ':s)
 
+--
 parenth :: Doc -> Doc
 parenth ss = doc (showChar '(') . ss . doc (showChar ')')
-
+--
 concatS :: [ShowS] -> ShowS
 concatS = foldr (.) id
-
+--
 concatD :: [Doc] -> Doc
 concatD = foldr (.) id
 
@@ -69,7 +72,7 @@ mkEsc q s = case s of
   _ -> showChar s
 
 prPrec :: Int -> Int -> Doc -> Doc
-prPrec i j = if j<i then parenth else id
+prPrec i j = if j < i then parenth else id
 
 
 instance Print Integer where
@@ -81,81 +84,91 @@ instance Print Double where
 
 
 instance Print Ident where
-  prt _ (Ident i) = doc (showString ( i))
-
-
+  prt _ (Ident i) = doc (showString (i))
 
 instance Print Boolean where
   prt i e = case e of
-    Boolean_True _-> prPrec i 0 (concatD [doc (showString "True")])
-    Boolean_False _-> prPrec i 0 (concatD [doc (showString "False")])
+    Boolean_True  _ -> prPrec i 0 (concatD [doc (showString "True" )])
+    Boolean_False _ -> prPrec i 0 (concatD [doc (showString "False")])
 
 instance Print RExpr where
   prt i e = case e of
-    InfixOp (BoolOp Or) rexpr1 rexpr2 _ -> prPrec i 0 (concatD [prt 0 rexpr1, doc (showString "||"), prt 1 rexpr2])
-    InfixOp (BoolOp And) rexpr1 rexpr2 _ -> prPrec i 1 (concatD [prt 1 rexpr1, doc (showString "&&"), prt 2 rexpr2])
-    UnaryOp Not rexpr _ -> prPrec i 2 (concatD [doc (showString "!"), prt 3 rexpr])
-    InfixOp (RelOp Eq) rexpr1 rexpr2 _ -> prPrec i 5 (concatD [prt 6 rexpr1, doc (showString "=="), prt 6 rexpr2])
-    InfixOp (RelOp Neq) rexpr1 rexpr2 _ -> prPrec i 5 (concatD [prt 6 rexpr1, doc (showString "!="), prt 6 rexpr2])
-    InfixOp (RelOp Lt) rexpr1 rexpr2 _ -> prPrec i 5 (concatD [prt 6 rexpr1, doc (showString "<"), prt 6 rexpr2])
-    InfixOp (RelOp LtE) rexpr1 rexpr2 _ -> prPrec i 5 (concatD [prt 6 rexpr1, doc (showString "<="), prt 6 rexpr2])
-    InfixOp (RelOp Gt) rexpr1 rexpr2 _ -> prPrec i 5 (concatD [prt 6 rexpr1, doc (showString ">"), prt 6 rexpr2])
-    InfixOp (RelOp GtE) rexpr1 rexpr2 _ -> prPrec i 5 (concatD [prt 6 rexpr1, doc (showString ">="), prt 6 rexpr2])
-    InfixOp (ArithOp Add) rexpr1 rexpr2 _ -> prPrec i 7 (concatD [prt 7 rexpr1, doc (showString "+"), prt 8 rexpr2])
-    InfixOp (ArithOp Sub) rexpr1 rexpr2 _ -> prPrec i 7 (concatD [prt 7 rexpr1, doc (showString "-"), prt 8 rexpr2])
-    InfixOp (ArithOp Mul) rexpr1 rexpr2 _ -> prPrec i 8 (concatD [prt 8 rexpr1, doc (showString "*"), prt 9 rexpr2])
-    InfixOp (ArithOp Div) rexpr1 rexpr2 _ -> prPrec i 8 (concatD [prt 8 rexpr1, doc (showString "/"), prt 9 rexpr2])
-    InfixOp (ArithOp Mod) rexpr1 rexpr2 _ -> prPrec i 8 (concatD [prt 8 rexpr1, doc (showString "%"), prt 9 rexpr2])
-    InfixOp (ArithOp Pow) rexpr1 rexpr2 _ -> prPrec i 9 (concatD [prt 10 rexpr1, doc (showString "**"), prt 9 rexpr2])
-    UnaryOp Neg rexpr _ -> prPrec i 11 (concatD [doc (showString "-"), prt 12 rexpr])
-    Ref lexpr _-> prPrec i 11 (concatD [doc (showString "\\"), prt 0 lexpr])
-    FCall funcall -> prPrec i 12 (concatD [prt 0 funcall])
-    Int n -> prPrec i 13 (concatD [prt 0 n])
-    Char c -> prPrec i 13 (concatD [prt 0 c])
-    String str -> prPrec i 13 (concatD [prt 0 str])
-    Float d -> prPrec i 13 (concatD [prt 0 d])
-    Bool boolean -> prPrec i 13 (concatD [prt 0 boolean])
-    Lexpr lexpr -> prPrec i 14 (concatD [prt 0 lexpr])
-    Rexpr rexpr _ -> prPrec i 15 (concatD [prt 0 rexpr])
-  prtList _ [] = (concatD [])
-  prtList _ [x] = (concatD [prt 0 x])
-  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
+    InfixOp (BoolOp  Or )   rexpr1 rexpr2 _ -> prPrec i 0  (concatD [prt 0  rexpr1, doc (showString "||"), prt 1  rexpr2])
+    InfixOp (BoolOp  And)   rexpr1 rexpr2 _ -> prPrec i 1  (concatD [prt 1  rexpr1, doc (showString "&&"), prt 2  rexpr2])
+    UnaryOp Not             rexpr  _        -> prPrec i 2  (concatD [doc                (showString "!" ), prt 3  rexpr ])
+    InfixOp (RelOp   Eq )   rexpr1 rexpr2 _ -> prPrec i 5  (concatD [prt 6  rexpr1, doc (showString "=="), prt 6  rexpr2])
+    InfixOp (RelOp   Neq)   rexpr1 rexpr2 _ -> prPrec i 5  (concatD [prt 6  rexpr1, doc (showString "!="), prt 6  rexpr2])
+    InfixOp (RelOp   Lt )   rexpr1 rexpr2 _ -> prPrec i 5  (concatD [prt 6  rexpr1, doc (showString "<" ), prt 6  rexpr2])
+    InfixOp (RelOp   LtE)   rexpr1 rexpr2 _ -> prPrec i 5  (concatD [prt 6  rexpr1, doc (showString "<="), prt 6  rexpr2])
+    InfixOp (RelOp   Gt )   rexpr1 rexpr2 _ -> prPrec i 5  (concatD [prt 6  rexpr1, doc (showString ">" ), prt 6  rexpr2])
+    InfixOp (RelOp   GtE)   rexpr1 rexpr2 _ -> prPrec i 5  (concatD [prt 6  rexpr1, doc (showString ">="), prt 6  rexpr2])
+    InfixOp (ArithOp Add)   rexpr1 rexpr2 _ -> prPrec i 7  (concatD [prt 7  rexpr1, doc (showString "+" ), prt 8  rexpr2])
+    InfixOp (ArithOp Sub)   rexpr1 rexpr2 _ -> prPrec i 7  (concatD [prt 7  rexpr1, doc (showString "-" ), prt 8  rexpr2])
+    InfixOp (ArithOp Mul)   rexpr1 rexpr2 _ -> prPrec i 8  (concatD [prt 8  rexpr1, doc (showString "*" ), prt 9  rexpr2])
+    InfixOp (ArithOp Div)   rexpr1 rexpr2 _ -> prPrec i 8  (concatD [prt 8  rexpr1, doc (showString "/" ), prt 9  rexpr2])
+    InfixOp (ArithOp Mod)   rexpr1 rexpr2 _ -> prPrec i 8  (concatD [prt 8  rexpr1, doc (showString "%" ), prt 9  rexpr2])
+    InfixOp (ArithOp Pow)   rexpr1 rexpr2 _ -> prPrec i 9  (concatD [prt 10 rexpr1, doc (showString "**"), prt 9  rexpr2])
+    UnaryOp Neg             rexpr  _        -> prPrec i 11 (concatD [doc                (showString "-" ), prt 12 rexpr ])
+    Ref                     lexpr  _        -> prPrec i 11 (concatD [doc                (showString "\\"), prt 0  lexpr ])
+    FCall                   funcall         -> prPrec i 12 (concatD [prt 0 funcall])
+    Const                   cons            -> prPrec i 13 (concatD [prt 0 cons])
+    Lexpr                   lexpr           -> prPrec i 14 (concatD [prt 0 lexpr  ])
+    Rexpr                   rexpr  _        -> prPrec i 15 (concatD [doc (showString "("), prt 0 rexpr, doc (showString ")")])
+  prtList _ []      = (concatD [])
+  prtList _ [x]     = (concatD [prt 0 x])
+  prtList _ (x:xs)  = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
+
+instance Print Const where
+  prt i e = case e of
+    Int                     n               -> prPrec i 0 (concatD [prt 0 n      ])
+    Char                    c               -> prPrec i 0 (concatD [prt 0 c      ])
+    String                  str             -> prPrec i 0 (concatD [prt 0 str    ])
+    Float                   d               -> prPrec i 0 (concatD [prt 0 d      ])
+    Bool                    boolean         -> prPrec i 0 (concatD [prt 0 boolean])
+
 instance Print FunCall where
   prt i e = case e of
-    Call id rexprs _ -> prPrec i 0 (concatD [prt 0 id, doc (showString "("), prt 0 rexprs, doc (showString ")")])
+    Call   id rexprs _        -> prPrec i 0  (concatD [prt 0 id, doc (showString "("), prt 0 rexprs, doc (showString ")")])
 
 instance Print LExpr where
   prt i e = case e of
-    Lex lexpr _ -> prPrec i 0 (concatD [prt 0 lexpr])
-    Deref rexpr _ -> prPrec i 0 (concatD [doc (showString "$$"), prt 0 rexpr])
-    PrePostIncDecr Post Inc lexpr _ -> prPrec i 0 (concatD [doc (showString "++"), prt 1 lexpr])
-    PrePostIncDecr Post Decr lexpr _ -> prPrec i 0 (concatD [doc (showString "--"), prt 1 lexpr])
-    PrePostIncDecr Pre Inc lexpr _ -> prPrec i 1 (concatD [prt 2 lexpr, doc (showString "++")])
-    PrePostIncDecr Pre Decr lexpr _ -> prPrec i 1 (concatD [prt 2 lexpr, doc (showString "--")])
-    BasLExpr blexpr -> prPrec i 2 (concatD [prt 0 blexpr])
+    Lex                       lexpr _ -> prPrec i 0 (concatD [doc (showString "("),  prt 0 lexpr, doc (showString ")")])
+    Deref                     rexpr _ -> prPrec i 0 (concatD [doc (showString "$"),  prt 0 rexpr])
+    PrePostIncDecr Post Inc   lexpr _ -> prPrec i 0 (concatD [prt 1 lexpr,           doc (showString "++")])
+    PrePostIncDecr Post Decr  lexpr _ -> prPrec i 0 (concatD [prt 1 lexpr,           doc (showString "--")])
+    PrePostIncDecr Pre Inc    lexpr _ -> prPrec i 1 (concatD [doc (showString "++"), prt 2 lexpr])
+    PrePostIncDecr Pre Decr   lexpr _ -> prPrec i 1 (concatD [doc (showString "--"), prt 2 lexpr])
+    BasLExpr                  blexpr  -> prPrec i 2 (concatD [prt 0 blexpr])
 
 instance Print BLExpr where
   prt i e = case e of
-    ArrayEl blexpr rexpr _ -> prPrec i 0 (concatD [prt 0 blexpr, doc (showString "["), prt 0 rexpr, doc (showString "]")])
-    Id id _ -> prPrec i 0 (concatD [doc (showString "$"), prt 0 id])
+    ArrayEl   blexpr rexpr  _ -> prPrec i 0 (concatD [prt 0 blexpr, doc (showString "["), prt 0 rexpr, doc (showString "]")])
+    Id        id   doa        -> prPrec i 0 (concatD [prt 0 doa, prt 0 id])
+
+instance Print DolOrAt where
+  prt i e = case e of
+       Dollar  -> prPrec i 0 (concatD [doc (showString "$")])
+       At      -> prPrec i 0 (concatD [doc (showString "@")])
 
 instance Print Program where
   prt i e = case e of
-    Prog decls -> prPrec i 0 (concatD [prt 0 decls])
+    Prog decls                -> prPrec i 0 (concatD [prt 0 decls])
 
 instance Print Decl where
   prt i e = case e of
-    Dvar typ _ vardeclinits -> prPrec i 0 (concatD [doc (showString "my"), prt 0 typ, prt 0 vardeclinits, doc (showString ";")])
-    UndVar typ _ undvardecls -> prPrec i 0 (concatD [doc (showString "my"), prt 0 typ, prt 0 undvardecls, doc (showString ";")])
-    Dfun typ id _ parameters stmtdecls -> prPrec i 0 (concatD [doc (showString "sub"), prt 0 typ, prt 0 id, doc (showString "("), prt 0 parameters, doc (showString ")"), doc (showString "{"), prt 0 stmtdecls, doc (showString "}")])
-  prtList _ [] = (concatD [])
+    Dvar    typ _  vardeclinits -> prPrec i 0 (concatD [doc (showString "my"), prt 0 typ, prt 0 vardeclinits, doc (showString ";")])
+    UndVar  typ _  undvardecls  -> prPrec i 0 (concatD [doc (showString "my"), prt 0 typ, prt 0 undvardecls, doc (showString ";")])
+    Dfun    typ id _ parameters stmtdecls -> prPrec i 0 (concatD [doc (showString "sub"), prt 0 typ, prt 0 id, doc (showString "("), prt 0 parameters, doc (showString ")"), doc (showString "{"), prt 0 stmtdecls, doc (showString "}")])
+  prtList _ []     = (concatD [])
   prtList _ (x:xs) = (concatD [prt 0 x, prt 0 xs])
+
 instance Print UndVarDecl where
   prt i e = case e of
     UndVarD undarr -> prPrec i 0 (concatD [prt 0 undarr])
     UndVarA undvar -> prPrec i 0 (concatD [prt 0 undvar])
-  prtList _ [x] = (concatD [prt 0 x])
+  prtList _ [x]    = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
+
 instance Print UndArr where
   prt i e = case e of
     UndA id _ -> prPrec i 0 (concatD [ doc (showString "@"), prt 0 id])
@@ -199,7 +212,7 @@ instance Print Array where
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 instance Print Parameter where
   prt i e = case e of
-    Param modality typ id -> prPrec i 0 (concatD [prt 0 modality, prt 0 typ, prt 0 id])
+    Param modality typ doa id -> prPrec i 0 (concatD [prt 0 modality, prt 0 typ, prt 0 doa, prt 0 id])
   prtList _ [] = (concatD [])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
@@ -221,14 +234,14 @@ instance Print StmtDecl where
   prtList _ (x:xs) = (concatD [prt 0 x, prt 0 xs])
 instance Print Stmt where
   prt i e = case e of
-    ProcCall funcall _ -> prPrec i 0 (concatD [prt 0 funcall, doc (showString ";")])
-    BlockDecl _ stmtdecls -> prPrec i 0 (concatD [doc (showString "{"), prt 0 stmtdecls, doc (showString "}")])
-    Jmp jumpstmt -> prPrec i 0 (concatD [prt 0 jumpstmt, doc (showString ";")])
-    Iter iterstmt -> prPrec i 0 (concatD [prt 0 iterstmt])
-    Sel selectionstmt -> prPrec i 0 (concatD [prt 0 selectionstmt])
-    TryC trycatch -> prPrec i 0 (concatD [prt 0 trycatch])
-    Assgn lexpr assignmentop rexpr line -> prPrec i 0 (concatD [prt 0 lexpr, prt 0 assignmentop, prt 0 rexpr, doc (showString ";"), prt 0 line])
-    LExprStmt lexpr _ -> prPrec i 0 (concatD [prt 0 lexpr, doc (showString ";")])
+    ProcCall    funcall _     -> prPrec i 0 (concatD [prt 0 funcall, doc (showString ";")])
+    BlockDecl   _ stmtdecls   -> prPrec i 0 (concatD [doc (showString "{"), prt 0 stmtdecls, doc (showString "}")])
+    Jmp         jumpstmt      -> prPrec i 0 (concatD [prt 0 jumpstmt, doc (showString ";")])
+    Iter        iterstmt      -> prPrec i 0 (concatD [prt 0 iterstmt])
+    Sel         selectionstmt -> prPrec i 0 (concatD [prt 0 selectionstmt])
+    TryC        trycatch      -> prPrec i 0 (concatD [prt 0 trycatch])
+    Assgn       lexpr ass_op rexpr _ -> prPrec i 0 (concatD [prt 0 lexpr, prt 0 ass_op, prt 0 rexpr, doc (showString ";")])
+    LExprStmt   lexpr _       -> prPrec i 0 (concatD [prt 0 lexpr, doc (showString ";")])
   prtList _ [] = (concatD [])
   prtList _ (x:xs) = (concatD [prt 0 x, prt 0 xs])
 

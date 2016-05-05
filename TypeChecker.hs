@@ -21,14 +21,14 @@ typechecker (Prog []) = Ok emptyEnv
 typechecker (Prog decls) =
     do
         {- aggiungiamo prima le signature delle funzioni in modo da garantire mutua ricorsione -}
-        env1 <- addFun emptyEnv (Ident "writeInt") T_Void [Param (M_Val 0) T_Int (Ident "x")] 0
-        env2 <- addFun emptyEnv (Ident "writeFloat") T_Void [Param (M_Val 0) T_Float (Ident "x")] 0
-        env3 <- addFun emptyEnv (Ident "writeChar") T_Void [Param (M_Val 0) T_Char (Ident "x")] 0
-        env4 <- addFun emptyEnv (Ident "writeString") T_Void [Param (M_Val 0) T_String (Ident "x")] 0
-        env5 <- addFun emptyEnv (Ident "readInt") T_Int [] 0
-        env6 <- addFun emptyEnv (Ident "readFloat") T_Float [] 0
-        env7 <- addFun emptyEnv (Ident "readChar") T_Char [] 0
-        env8 <- addFun emptyEnv (Ident "readString") T_String [] 0
+        env1 <- addFun emptyEnv (Ident "writeInt") T_Void [Param (M_Val 0) T_Int (Id (Ident "x") Dollar )] 0
+        env2 <- addFun env1 (Ident "writeFloat") T_Void [Param (M_Val 0) T_Float (Id (Ident "x") Dollar )] 0
+        env3 <- addFun env2 (Ident "writeChar") T_Void [Param (M_Val 0) T_Char (Id (Ident "x") Dollar )] 0
+        env4 <- addFun env3 (Ident "writeString") T_Void [Param (M_Val 0) T_String (Id (Ident "x") Dollar )] 0
+        env5 <- addFun env4 (Ident "readInt") T_Int [] 0
+        env6 <- addFun env5 (Ident "readFloat") T_Float [] 0
+        env7 <- addFun env6 (Ident "readChar") T_Char [] 0
+        env8 <- addFun env7 (Ident "readString") T_String [] 0
         env <- checkFunDefs env8 decls
         checkDecls env decls
 
@@ -69,7 +69,7 @@ checkFunDefs env [] = Ok env
 checkFunDefs env (decl:decls) =
     do 
         env_ <- checkFunDef env decl
-        checkFunDefs env decls
+        checkFunDefs env_ decls
 
 checkFunDef :: Env -> Decl -> Err Env 
 checkFunDef env decl =
@@ -82,7 +82,7 @@ checkFunStmts env [] = Ok env
 checkFunStmts env (stmt_decl:stmts_decls) =
     do 
         env_ <- checkFunStmt env stmt_decl
-        checkFunStmts env stmts_decls
+        checkFunStmts env_ stmts_decls
 
 checkFunStmt :: Env -> StmtDecl -> Err Env 
 checkFunStmt env stmt_decl =
@@ -97,19 +97,19 @@ checkDecls env (decl:decls) =
         Dvar typ _ vardecl -> 
             do 
                 env_ <- checkVarInit env vardecl typ
-                checkDecls env decls
+                checkDecls env_ decls
         UndVar typ _ undvardecl ->
             do 
                 env_ <- addVars env (map getIdUndVar undvardecl) typ False (map getLineUndVar undvardecl)
-                checkDecls env decls
+                checkDecls env_ decls
         Dfun typ id pos param stmts_decls ->
             do 
-                env2 <- addScope env 
-                env3 <- foldM (\env (Param mod typ id) -> addVar env id typ True pos) env2 param
-                env4 <- checkFunStmts env3 stmts_decls
-                checkStmtsDecls env4 stmts_decls typ pos
-                env5 <- remScope env4
-                checkDecls env5 decls
+                env1 <- addScope env 
+                env2 <- addParam env param 
+                env3 <- checkFunStmts env2 stmts_decls
+                checkStmtsDecls env3 stmts_decls typ pos
+                env4 <- remScope env3
+                checkDecls env4 decls
     where 
         getIdUndVar :: UndVarDecl -> Ident 
         getIdUndVar undvard =
@@ -121,34 +121,48 @@ checkDecls env (decl:decls) =
             case undvard of 
                 UndVarD (UndA _ l) -> l
                 UndVarA (UndV _ l) -> l 
+        addParam :: Env -> [Parameter] -> Err Env 
+        addParam env [] = Ok env 
+        addParam env (param:params) = 
+            case param of 
+                (Param mod id typ Dollar) -> addVar env id typ True 0
+                (Param mod id typ At) -> addVar env id (Arrdef typ 0) True 0
+
 
 checkVarInit :: Env -> [VarDeclInit] -> Type -> Err Env 
 checkVarInit env [] _ = Ok env
 checkVarInit env (vardin:varsdin) typ = 
     case vardin of
-        VarDeclInA (VarDeclInitAr id array pos) -> checkArray env id typ pos array 
+        VarDeclInA (VarDeclInitAr id array pos) -> case checkArray env id typ pos array of
+                                                     Ok _ -> addVar env id (ArrDef typ 2) True pos
+                                                     Bad err -> Bad err 
+
         VarDeclInV (VarDeclInitV id rexpr pos) -> 
-            do 
-                let typ_ = checkRExpr env rexpr
-                case checkType typ_ (Ok typ) of
-                    Just t -> Ok env
-                    Nothing -> Bad ("Error : value assigned to variable " ++ printTree id ++ "declared at line " ++ show pos ++ "should have type" ++ printTree typ
-                               ++ " but has type " ++ printTree ( (\(Ok typ) -> typ) typ_ ) ++ "\n")
-        
+                case checkRExpr env rexpr of
+                    Ok typ_ -> 
+                        case checkType typ_ typ of
+                                Just t -> do 
+                                            do 
+                                                env_ <- addVar env id typ True pos
+                                                checkVarInit env_ varsdin typ
+                                Nothing -> Bad ("Error : value assigned to variable " ++ printTree id ++ "declared at line " ++ show pos ++ "should have type" ++ printTree typ
+                                       ++ " but has type " ++ printTree typ_  ++ "\n")
+                    Bad err -> Bad err
 checkArray :: Env -> Ident  -> Type -> Int -> Array -> Err Env 
 checkArray env id typ pos array= 
     case array of 
         ArrE rexprs -> 
-            do
-                let typ_ = checkRExprs env rexprs
-                case checkType typ_ (Ok typ) of
-                    Just t -> Ok env 
-                    Nothing -> Bad ("Error : while initializing array " ++ printTree id ++ " declared at line " ++ show pos ++ " element's type should be" ++ printTree typ
-                               ++ " but found " ++ printTree ( (\(Ok typ) -> typ) typ_ ) )
+                case checkRExprs env rexprs of 
+                    Ok typ_ ->
+                        case checkType typ_ typ of
+                            Just t -> Ok env
+                            Nothing -> Bad ("Error : while initializing array " ++ printTree id ++ " declared at line " ++ show pos ++ " element's type should be" ++ printTree typ
+                                       ++ " but found " ++ printTree typ_ )
+                    Bad err -> Bad err
         Arr array _ ->  ((\([Ok env_]) -> Ok env)( map (checkArray env id typ pos) array ))
 
 checkStmtsDecls :: Env -> [StmtDecl] -> Type -> Int -> Err Env 
-checkStmtsDecls env [] typ _ = Ok env
+checkStmtsDecls env [] _ _ = Ok env
 checkStmtsDecls env (stmt_decl:stmts_decls) typ pos = 
     case stmt_decl of
         Decls decl ->
@@ -176,106 +190,59 @@ checkStmt env stmt typ pos =
                         _ -> Bad ("Error : function declared at line " ++ show pos ++ " is not of type void as suggeste ad line " ++ show p ++ 
                                   " by the return statement\n")
                 RetExp rexpr p -> 
-                    do 
-                        let typ_ = checkRExpr env rexpr 
-                        case checkType typ_ (Ok typ) of 
-                            Just _ -> Ok env
-                            Nothing -> Bad ("Error : function declared at line " ++ show pos ++ " is not of type " ++ printTree typ ++ " as suggeste ad line " 
-                                       ++ show p ++ " by the return statement\n")
+                        case checkRExpr env rexpr of
+                            Ok typ_ ->
+                                case checkType typ_ typ of 
+                                    Just _ -> Ok env
+                                    Nothing -> Bad ("Error : function declared at line " ++ show pos ++ " is not of type " ++ printTree typ ++ " as suggeste ad line " 
+                                               ++ show p ++ " by the return statement\n")
+                            Bad err -> Bad err
         Iter iterstmt -> 
             case iterstmt of
                 While rexpr p stmts_decls -> 
-                    case checkRExpr env rexpr of 
-                        Ok T_Bool -> checkIterStmtsDecls env stmts_decls typ pos 
-                        _ -> Bad ("Error : invalid guard of while statement at line " ++ show p)
+                    do
+                        case checkRExpr env rexpr of 
+                            Ok T_Bool -> do  
+                                            env_ <- addScope env 
+                                            env__ <- checkIterStmtsDecls env_ stmts_decls typ pos 
+                                            remScope env__
+                            _ -> Bad ("Error : invalid guard of while statement at line " ++ show p)
                 DoWhile stmts_decls rexpr p -> 
                     case checkRExpr env rexpr of 
-                        Ok T_Bool -> checkIterStmtsDecls env stmts_decls typ pos 
+                        Ok T_Bool -> do
+                                        env_ <- addScope env 
+                                        env__ <- checkIterStmtsDecls env stmts_decls typ pos 
+                                        remScope env__
                         _ -> Bad ("Error : invalid guard of do-while statement at line " ++ show p)
                 DoUntil stmts_decls rexpr p -> 
                     case checkRExpr env rexpr of 
-                        Ok T_Bool -> checkIterStmtsDecls env stmts_decls typ pos 
+                        Ok T_Bool -> do 
+                                        env_ <- addScope env
+                                        env__ <- checkIterStmtsDecls env stmts_decls typ pos
+                                        remScope env__ 
                         _ -> Bad ("Error : invalid guard of do-until statement at line " ++ show p)
                 ForEach forstmt forstmt_ p stmts_decls ->
-                    case forstmt of 
-                        ForDecl typ_ id p_ ->
-                            case forstmt_ of 
-                                LexprForStmt lexpr ->
-                                    case checkLExpr env lexpr of 
-                                        Ok (ArrDef typ__ _) ->
-                                            case checkType (Ok typ_) (Ok typ__) of 
-                                                Just _ -> checkIterStmtsDecls env stmts_decls typ pos
-                                                Nothing -> Bad ("Error : in for each statement at line " ++ show p_ ++ " variable " ++ printTree id ++ "(" ++ printTree typ_ ++ ")" 
-                                                            ++ " is not of the same type of var " ++ printTree id ++ "(" ++ printTree typ__ ++ ")\n" ) 
-                                        Ok _ -> Bad("Error : in for each statement at line " ++ show p_ ++ " iterable shold be and array\n")
+                    do 
+                        env_ <- addScope env
+                        case forstmt of 
+                            ForDecl typ_ id p_ ->
+                                do 
+                                    env__ <- addVar env_ id typ_ True pos
+                                    case forstmt_ of 
+                                        LexprForStmt lexpr ->
+                                            case checkLExpr env__ lexpr of 
+                                                Ok (ArrDef typ__ _) ->
+                                                    case checkType typ_ typ__ of 
+                                                        Just _ -> do
+                                                                    env___ <- checkIterStmtsDecls env stmts_decls typ pos
+                                                                    remScope env___
+                                                        Nothing -> Bad ("Error : in for each statement at line " ++ show p_ ++ " variable " ++ printTree id ++ "(" ++ printTree typ_ ++ ")" 
+                                                                    ++ " is not of the same type of var " ++ printTree id ++ "(" ++ printTree typ__ ++ ")\n" ) 
+                                                Ok _ -> Bad("Error : in for each statement at line " ++ show p_ ++ " iterable shold be and array\n")
+                                                _ -> Bad("Error : in for statement at line " ++ show p_ ++ " iterable not correctly defined\n")
                                         _ -> Bad("Error : in for statement at line " ++ show p_ ++ " iterable not correctly defined\n")
-                                _ -> Bad("Error : in for statement at line " ++ show p_ ++ " iterable not correctly defined\n")
-                        _ -> Bad ("Error : invalid guard in for each statement at line " ++ show p ++ "\n")
-                For  forstmtdecl rexpr forstmt p stmts_decls -> 
-                    case checkRExpr env rexpr of
-                        Ok T_Bool ->
-                            case forstmtdecl of 
-                                ForDeclInit typ id ass rexpr _ -> 
-                                    case ass of 
-                                        Assign _ ->                                                                
-                                             case checkRExpr env rexpr of
-                                                Ok typ_ -> 
-                                                    case (checkType (Ok typ_ ) (Ok typ) )of 
-                                                        Just _ -> 
-                                                            case forstmt of 
-                                                                AssFor id_ _ rexpr ->
-                                                                 if (id == id_) then
-                                                                    do
-                                                                        let typ_ = checkRExpr env rexpr
-                                                                        case checkType typ_ (Ok typ) of 
-                                                                            Just _ -> checkIterStmtsDecls env stmts_decls typ pos
-                                                                            Nothing -> Bad ("Errore\n")
-                                                                  else 
-                                                                        Bad ("Errore\n")
-                                                                LexprForStmt lexpr -> 
-                                                                    case lexpr of
-                                                                        PrePostIncDecr _ _ lexpr _ ->
-                                                                            do 
-                                                                                let typ_ = checkLExpr env lexpr
-                                                                                case checkType typ_ (Ok typ) of
-                                                                                    Just _ -> checkIterStmtsDecls env stmts_decls typ pos
-                                                                                    Nothing ->  Bad ("Errore\n")
-                                                                        _ ->  Bad ("Errore\n")
-                                                                _ ->  Bad ("Errore\n")
-                                                        Nothing ->  Bad ("Errore\n")
-                                        _ ->  Bad ("Errore\n")
-                                Simple id _ rexpr p ->
-                                    do
-                                        env_ <- signAsDef env id 
-                                        case lookupVar env_ id of 
-                                            Just typ  -> 
-                                                do 
-                                                    let typ_ = checkRExpr env rexpr 
-                                                    case checkType typ_ (Ok typ) of 
-                                                        Just _ ->  
-                                                            case forstmt of 
-                                                                AssFor id_ _ rexpr ->
-                                                                 if (id == id_) then
-                                                                    do
-                                                                        let typ_ = checkRExpr env rexpr
-                                                                        case checkType typ_ (Ok typ) of 
-                                                                            Just _ -> checkIterStmtsDecls env stmts_decls typ pos
-                                                                            Nothing -> Bad ("Errore\n")
-                                                                  else 
-                                                                        Bad ("Errore\n")
-                                                                LexprForStmt lexpr -> 
-                                                                    case lexpr of
-                                                                        PrePostIncDecr _ _ lexpr _ ->
-                                                                            do 
-                                                                                let typ_ = checkLExpr env lexpr
-                                                                                case checkType typ_ (Ok typ) of
-                                                                                    Just _ -> checkIterStmtsDecls env stmts_decls typ pos
-                                                                                    Nothing ->  Bad ("Errore\n")
-                                                                        _ ->  Bad ("Errore\n")
-                                                                _ ->  Bad ("Errore\n")
-                                                        Nothing -> Bad ("Errore\n")
-                                            Nothing -> Bad ("Errore\n")
-                        _ -> Bad ("Error : invalid declaration of guard for loop statement at line" ++ show p ++ "\n")
+                            _ -> Bad ("Error : invalid guard in for each statement at line " ++ show p ++ "\n")
+                -- For  forstmtdecl rexpr forstmt p stmts_decls -> checkForStmt env forstmtdecl rexpr forstmt p stmts_decls                
         Sel selectionstmt ->
             case selectionstmt of
                 IfNoElse rexpr p stmts_decls ->
@@ -290,25 +257,31 @@ checkStmt env stmt typ pos =
                                 checkElsif env_ elsif typ pos 
                         _ -> Bad("Error : invalid declaration of if condition at line " ++ show p ++ "\n" )
         Assgn lexpr ass rexpr p -> 
-            case checkLExpr env lexpr of 
+            case checkLExpr env lexpr of
+                {- funzione definita, ma non inizializzata -} 
                 Ok T_Error  -> 
                     case ass of 
                         Assign _ -> 
                             do
-                                {-env_ <- signAsDef env (getIdLexpr lexpr)-}
+                                env_ <- signAsDef env (getIdLexpr lexpr)
                                 checkStmt env stmt typ pos
                 Ok typ_  ->     
-                    do
-                        let typ__ = checkRExpr env rexpr 
-                        case checkType (Ok typ_) typ__ of 
-                            Just _ -> Ok env 
-                            Nothing -> Bad ("Error : bad typing at line " ++ show p ++ " in assignement of var " ++ printTree  (getIdLexpr lexpr)
-                                      ++ " of typ " ++ printTree typ_ ++ "\n")
+                        case checkRExpr env rexpr of 
+                            Ok typ__ ->
+                                case checkType typ_ typ__ of 
+                                    Just _ -> Ok env 
+                                    Nothing -> Bad ("Error : bad typing at line " ++ show p ++ " in assignement of var " ++ printTree  (getIdLexpr lexpr)
+                                              ++ " of typ " ++ printTree typ_ ++ "\n")
+                            Bad err -> Bad err
+             {- operazioni infisse -}
         TryC (Try _ stmts_decls typ _ p stmts_decls_) ->
             do 
-                env_ <- checkStmtsDecls env stmts_decls typ pos 
+                env_ <- addScope env
+                env__ <- checkStmtsDecls env_ stmts_decls typ pos 
                 case typ of
-                    T_Error -> checkStmtsDecls env_ stmts_decls_ typ pos
+                    T_Error -> do
+                                env___ <- checkStmtsDecls env__ stmts_decls_ typ pos
+                                remScope env___
                     _ -> Bad ("Error : incorrect declaration of catch exception at line " ++ show p ++ "\n")
         LExprStmt lexpr p -> if (checkLExpr env lexpr == Ok typ) then 
                                 Ok env
@@ -338,12 +311,14 @@ signAsDef env id = Ok (map (mylookup id) env)
                                          else 
                                             var
 
-checkIterStmtsDecls :: Env -> [IterStmtDecl] -> Type -> Int -> Err Env 
+checkIterStmtsDecls :: Env -> [IterStmtDecl] -> Type -> Int -> Err Env
+checkIterStmtsDecls env [] _ _ = Ok env
 checkIterStmtsDecls env (itr_stmt_decl:itr_stmts_decls) typ pos =
     case itr_stmt_decl of 
         Break _ -> checkIterStmtsDecls env itr_stmts_decls typ pos
         Continue _ -> checkIterStmtsDecls env itr_stmts_decls typ pos
         ItStDe stmt_decl -> checkStmtsDecls env (stmt_decl:[]) typ pos 
+
 
 getIdLexpr :: LExpr -> Ident 
 getIdLexpr lexpr =
@@ -370,38 +345,40 @@ checkLExpr env lexpr =
             case checkLExpr env lexpr of 
                 Ok T_Int -> Ok T_Int 
                 Ok T_Float -> Ok T_Float 
+                _ -> Bad ("Error\n")
         BasLExpr blexpr -> checkBLExpr env blexpr 
-        where 
-            checkBLExpr :: Env -> BLExpr -> Err Type
-            checkBLExpr env blexpr = 
-                case blexpr of 
-                    Id id p_ -> 
-                        case lookupVar env id of 
-                            Just T_Error -> Ok T_Error
-                            Just typ -> Ok typ 
-                            Nothing ->  Bad ("Error : variable " ++ printTree id ++ " at line " ++ show p_ ++ " is not declared\n")
-                    ArrayEl blexpr rexpr p_ -> 
-                        case checkRExpr env rexpr of 
-                            Ok T_Int -> checkBLExpr env blexpr 
-                            _ -> Bad ("Error : incorrect indicization of array " ++ printTree (getIdBLexpr blexpr) ++ " at line " ++ show p_ ++ "\n")
+    where 
+        checkBLExpr :: Env -> BLExpr -> Err Type
+        checkBLExpr env blexpr = 
+            case blexpr of 
+                Id id p_ -> 
+                    case lookupVar env id of 
+                        Just T_Error -> Ok T_Error
+                        Just typ -> Ok typ 
+                        Nothing ->  Bad ("Error : variable " ++ printTree id ++ " at line " ++ show p_ ++ " is not declared\n")
+                ArrayEl blexpr rexpr p_ -> 
+                    case checkRExpr env rexpr of 
+                        Ok T_Int -> checkBLExpr env blexpr 
+                        _ -> Bad ("Error : incorrect indicization of array " ++ printTree (getIdBLexpr blexpr) ++ " at line " ++ show p_ ++ "\n")
 
 checkRExpr :: Env -> RExpr -> Err Type 
 checkRExpr env rexpr = 
     case rexpr of 
         Rexpr rexpr _ -> checkRExpr env rexpr 
-        InfixOp infixop rexpr1 rexpr2 pos ->
-            do 
-                let typ_ = checkRExpr env rexpr1
-                let typ__ = checkRExpr env rexpr2
-                case checkTypeInfix infixop typ_ typ__ of
-                    Just typ -> Ok typ
-                    Nothing -> Bad ("Error : operation not permitted between " ++ printTree ( (\(Ok typ) -> typ) typ_ ) ++ " and " ++ printTree ( (\(Ok typ) -> typ) typ__ ) ++ " at line " ++ show pos ++ "\n")
+        InfixOp infixop rexpr1 rexpr2 pos -> case checkRExpr env rexpr1 of 
+                                                Ok typ_ -> case checkRExpr env rexpr2 of
+                                                            Ok typ__ -> case checkTypeInfix infixop typ_ typ__ of
+                                                                        Just typ -> Ok typ
+                                                                        Nothing -> Bad ("Error : operation not permitted between " ++ printTree  typ_  ++ " and " ++ printTree typ__  ++ " at line " ++ show pos ++ "\n")
+                                                            Bad err -> Bad err
+                                                Bad err -> Bad err        
         UnaryOp unaryop rexpr pos -> 
-            do
-                let typ = checkRExpr env rexpr
-                case  checkTypeUnary unaryop typ of 
-                    Just typ -> Ok typ
-                    Nothing -> Bad ("Error : operation not permitted whit " ++ printTree ( (\(Ok typ_) -> typ_) typ ) ++ " at line " ++ show pos ++ "\n")
+            case checkRExpr env rexpr of 
+                Ok typ -> case  checkTypeUnary unaryop typ of 
+                            Just typ -> Ok typ
+                            Nothing -> Bad ("Error : operation not permitted whit " ++ printTree typ  ++ " at line " ++ show pos ++ "\n")
+                Bad err -> Bad err
+                
         Ref lexpr pos -> 
             case checkLExpr env lexpr of 
                 Ok (Pointer typ) -> Ok typ
@@ -411,46 +388,38 @@ checkRExpr env rexpr =
                 Just typ -> Ok typ
                 Nothing -> Bad ("Error : function used at line " ++ show pos ++ " is not declared\n")
         Lexpr lexpr -> checkLExpr env lexpr
-        Int _ -> Ok T_Int
-        String _ -> Ok T_String
-        Float _ -> Ok T_Float
-        Char _ -> Ok T_Char
-        Bool _ -> Ok T_Bool 
+        Const const -> case const of
+                        Int _ -> Ok T_Int
+                        String _ -> Ok T_String
+                        Float _ -> Ok T_Float
+                        Char _ -> Ok T_Char
+                        Bool _ -> Ok T_Bool 
 
-checkTypeUnary :: UnaryOp -> Err Type -> Maybe Type 
-checkTypeUnary unaryop typ@(Ok typ_) = 
+checkTypeUnary :: UnaryOp -> Type -> Maybe Type 
+checkTypeUnary unaryop typ = 
     case unaryop of 
-        Not -> if (typ == Ok T_Bool) then 
-                Just T_Bool
-                else 
-                Nothing 
-        Neg -> if (typ == Ok T_Int || typ == Ok T_Float) then
-                Just typ_
-               else  
-                Nothing 
-
-checkTypeInfix :: InfixOp -> Err Type -> Err Type -> Maybe Type 
-checkTypeInfix infixop typ1@(Ok typ1_) typ2@(Ok typ2_) =
+        Not -> case (typ == T_Bool) of
+                True -> Just T_Bool
+                False -> Nothing 
+        Neg -> case (typ == T_Int || typ == T_Float) of
+                True -> Just typ
+                False -> Nothing
+ 
+checkTypeInfix :: InfixOp -> Type -> Type -> Maybe Type 
+checkTypeInfix infixop typ1 typ2 =
     case infixop of 
-        ArithOp _  -> if (typ1 == typ2 && (typ1 == Ok T_Int || typ1 == Ok T_Float)) then 
-                        Just typ1_
-                      else 
-                        if ((typ1 == Ok T_Int && typ2 == Ok T_Float) || (typ1 == Ok T_Float && typ2 == Ok T_Int)) then 
-                            Just T_Float
-                        else 
-                            Nothing 
-        BoolOp _ -> if (typ1 == typ2 && typ1 == Ok T_Bool) then 
-                        Just T_Bool
-                    else 
-                        Nothing
-        RelOp _ -> if (typ1 == typ2 && (typ1 == Ok T_Int || typ1 == Ok T_Float)) then 
-                        Just typ1_
-                      else 
-                        if ((typ1 == Ok T_Int && typ2 == Ok T_Float) || (typ1 == Ok T_Float && typ2 == Ok T_Int)) then 
-                            Just T_Float
-                        else 
-                            Nothing 
-
+        ArithOp _  -> case (typ1 == typ2 && (typ1 == T_Int || typ1 == T_Float)) of 
+                        True -> Just typ1 
+                        False -> case ((typ1 == T_Int && typ2 == T_Float) || (typ1 == T_Float && typ2 == T_Int)) of
+                                    True -> Just T_Float
+        BoolOp _ -> case (typ1 == typ2 && typ1 == T_Bool) of 
+                        True -> Just T_Bool
+                        False -> Nothing
+        RelOp _ -> case (typ1 == typ2 && (typ1 == T_Int || typ1 == T_Float)) of 
+                        True -> Just T_Bool
+                        False -> case ((typ1 == T_Int && typ2 == T_Float) || (typ1 == T_Float && typ2 == T_Int)) of
+                                    True -> Just T_Bool
+                                    False -> Nothing 
 
 checkRExprs :: Env -> [RExpr] -> Err Type
 checkRExprs env [rexpr] = checkRExpr env rexpr
@@ -459,42 +428,53 @@ checkRExprs env (rexpr:rexprs) =
             Ok _ -> checkRExprs env rexprs 
             
 
-lookupFun :: Env -> Ident -> [RExpr] -> Maybe Type
+lookupFun :: Env -> Ident -> [RExpr] -> Type -> Maybe Type
 lookupFun [] id param = Nothing
 lookupFun env@(scope:scopes) id param = 
     case lookup id (fst scope) of
         Nothing -> lookupFun scopes id param
-        Just sig -> checkParam env sig param
+        Just sig -> checkParam env (snd . snd sig) param (fst . snd sig)
 
-checkParam :: Env -> (Type, [(Type, Modality)]) -> [RExpr] -> Maybe Type
-checkParam env ptyp param = checkP env ( map fst ((\(typ, lpar) -> lpar ) ptyp)) param ((\(typ, lpar) -> typ) ptyp)
-    where 
-        checkP :: Env -> [Type] -> [RExpr] -> Type -> Maybe Type
-        checkP env [] (param:_) typ = Nothing
-        checkP env (ptyp:_) [] typ = Nothing
-        checkP env [] [] typ = Just typ
-        checkP env (ptyp:ptyps) (param:params) typ = 
-            if (checkRExpr env param == Ok ptyp) then 
-                checkP env ptyps params typ
-            else 
-                Nothing
+checkParam :: Env -> [(Type, Modality)] -> [RExpr] -> Type -> Maybe Type
+checkParam _ [] [] typ = Just typ
+checkParam _ [] _ _ = Nothing
+checkParam _  _ [] _ = Nothing
+checkParam env (param:params) (rexpr:rexprs) typ = 
+    case snd param of
+        M_Const _ -> case rexpr of
+                        Const -> case checkRExprs env rexpr of 
+                                    Ok typ_ -> case checkType typ_ (fst param) of 
+                                                Just _ -> checkParam env params rexprs typ 
+                                                Nothing -> Nothing
+                                    _ -> Nothing
+                        _ -> Nothing 
+        M_Val _ -> case checkRExpr env rexpr of 
+                        Ok typ_ -> case checkType typ_ (fst . param) of 
+                                    Just _ -> checkParam env params rexpr typ 
+                                    Nothing -> Nothing 
+                        _ -> Nothing
 
 lookupVar :: Env -> Ident -> Maybe Type
 lookupVar [] id = Nothing 
 lookupVar (scope:scopes) id = 
     case lookup id (snd scope) of
         Nothing -> lookupVar scopes id 
-        Just var -> if ((snd var) == False) then 
-                        Just T_Error
-                    else 
-                        Just (fst var)
+        Just var -> case snd var of
+                       False -> Just T_Error
+                       True -> Just (fst var)
 
-checkType :: Err Type -> Err Type -> Maybe Type 
-checkType (Ok typ1) (Ok typ2) = 
-    if (typ1 == typ2) then 
-        Just typ1
-    else 
-        if ((typ1 == T_Int && typ2 == T_Float) || (typ1 == T_Float && typ2 == T_Int)) then
-            Just T_Float
-        else 
-            Nothing 
+
+checkType :: Type -> Type -> Maybe Type 
+checkType typ1 typ2 = 
+    case (typ1 == typ2) of 
+        True -> Just typ1
+        False ->
+            case ((typ1 == T_Int && typ2 == T_Float) || (typ1 == T_Float && typ2 == T_Int)) of
+                True -> Just T_Float
+                False -> case typ1 of
+                            ArrDef typ _ -> checkType typ typ2
+                            _ -> case typ2 of 
+                                     ArrDef typ _ -> checkType typ typ1 
+                                     _ -> Nothing
+
+

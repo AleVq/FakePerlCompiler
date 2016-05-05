@@ -1,5 +1,15 @@
-
+my int @array = (2, 3);
 sub int f () {
-my char $c = 3;
+	my int $s=4;
+	my int $t=3;
+	$s =$t;
+	do{
+		$s--;
+		--$s;
+	}until($s<11);
+	$s=g();
 }
 
+sub int g(){
+	return (5);
+}

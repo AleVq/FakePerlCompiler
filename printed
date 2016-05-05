@@ -1,0 +1,18 @@
+my int @ array = (2, 3);
+sub int f () {
+  my int $ s = 4 ;
+  my int $ t = 3 ;
+  $ s = $ t ;
+  5 do {
+    -- $ s ;
+    $ s -- ;
+    }
+  until ($ s < 11);
+  sub int h () {
+    $ q = 4 ;
+    11 return (++ $ q);
+    }
+  }
+sub void g () {
+  return ;
+  }
